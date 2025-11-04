@@ -1,0 +1,93 @@
+name: CD 3-Environments
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+jobs:
+  build:
+    name: Build & Package
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: app-artifact
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          echo "Pretend build here (npm build / mvn package / docker build)"
+          echo "Build SHA: $GITHUB_SHA"
+
+      - name: Package artifact
+        run: |
+          mkdir -p dist
+          echo "hello from $GITHUB_SHA" > dist/info.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-artifact
+          path: dist/
+
+  deploy_dev:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    needs: [build]
+    environment:
+      name: dev   # no approvals here
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-artifact
+
+      - name: Deploy (Dev)
+        run: |
+          echo "Deploying to DEV..."
+          ls -la
+          echo "I am deploying build $GITHUB_SHA to DEV"
+          # e.g., kubectl apply -n dev -f k8s/
+          # or az webapp deployment source config-zip ...
+
+  deploy_uat:
+    name: Deploy to UAT (Approval required)
+    runs-on: ubuntu-latest
+    needs: [deploy_dev]
+    environment:
+      name: uat   # will wait for approval
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-artifact
+
+      - name: Deploy (UAT)
+        run: |
+          echo "Deploying to UAT (awaited approval) ..."
+          ls -la
+          echo "I am deploying build $GITHUB_SHA to UAT"
+
+  deploy_prod:
+    name: Deploy to Prod (Approval required)
+    runs-on: ubuntu-latest
+    needs: [deploy_uat]
+    environment:
+      name: prod  # will wait for approval
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-artifact
+
+      - name: Deploy (Prod)
+        run: |
+          echo "Deploying to PROD (awaited approval) ..."
+          ls -la
+          echo "I am deploying build $GITHUB_SHA to PROD"

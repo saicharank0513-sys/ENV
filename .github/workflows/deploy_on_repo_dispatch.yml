@@ -1,0 +1,50 @@
+name: Deploy on Repo Dispatch
+
+on:
+  repository_dispatch:
+    types:
+      - microservice-updated-*
+      # You can also list specific ones, e.g. microservice-updated-payments
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+jobs:
+  deploy:
+    # Attach the job to the target environment coming from the payload.
+    # This automatically enforces approvals (uat/prod) and injects env secrets.
+    environment: ${{ github.event.client_payload.environment }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Show which service/env triggered
+        run: |
+          echo "Service: ${{ github.event.client_payload.service_name }}"
+          echo "Env:     ${{ github.event.client_payload.environment }}"
+          echo "Event:   ${{ github.event.action || github.event.action == '' && github.event_type || 'repository_dispatch' }}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Example: use same variable names from env-level secrets
+      - name: Prepare DB connection (do not echo secrets)
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+          DB_SERVER: ${{ secrets.DB_SERVER }}
+        run: |
+          echo "Using environment-scoped DB config (values hidden)."
+          # Example placeholders:
+          # psql "host=$DB_SERVER user=$DB_USER password=$DB_PASS" -c 'SELECT 1'
+          # mysql -h "$DB_SERVER" -u "$DB_USER" -p"$DB_PASS" -e 'SELECT 1'
+
+      - name: Deploy ${{ github.event.client_payload.service_name }} to ${{ github.event.client_payload.environment }}
+        env:
+          SERVICE_NAME: ${{ github.event.client_payload.service_name }}
+        run: |
+          echo "Deploying $SERVICE_NAME to ${{ github.event.client_payload.environment }}..."
+          # e.g., kubectl apply -n ${{ github.event.client_payload.environment }} -f k8s/$SERVICE_NAME/
+          # or helm upgrade --install $SERVICE_NAME charts/$SERVICE_NAME -n ${{ github.event.client_payload.environment }}
+          # or az webapp deployment ...

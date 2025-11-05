@@ -1,0 +1,52 @@
+name: Orchestrate Microservice Deploy (repo_dispatch)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: "owner/repo of the service repository"
+        required: true
+        default: "your-org/your-service-repo"
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options: [dev, uat, prod]
+        default: dev
+      service_name:
+        description: "Microservice name (e.g., payments, users)"
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  send-repo-dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compose event type with service
+        id: compose
+        run: |
+          EVT="microservice-updated-${{ github.event.inputs.service_name }}"
+          echo "event_type=$EVT" >> $GITHUB_OUTPUT
+
+      - name: Fire repository_dispatch to target repo
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const [owner, repo] = "${{ github.event.inputs.target_repo }}".split("/");
+            await github.repos.createDispatchEvent({
+              owner,
+              repo,
+              event_type: "${{ steps.compose.outputs.event_type }}",
+              client_payload: {
+                environment: "${{ github.event.inputs.environment }}",
+                service_name: "${{ github.event.inputs.service_name }}",
+                orchestrator_run_url: `${context.payload.repository.html_url}/actions/runs/${context.runId}`
+              }
+            });
+
+      - name: Human-friendly status line
+        run: |
+          echo "Triggered: microservice-updated-${{ github.event.inputs.service_name }} -> env=${{ github.event.inputs.environment }}"
